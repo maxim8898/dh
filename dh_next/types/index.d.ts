@@ -56,4 +56,7 @@ export type DrupalProduct = {
     processed: string
   }
   images: Image[]
+  created?: {
+    time: string
+  }
 }

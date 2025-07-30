@@ -46,7 +46,7 @@ export async function FeaturedProducts() {
             </p>
           </div>
           <Link
-            href="#"
+            href="/products"
             className="inline-flex items-center justify-center rounded-md border border-primary bg-white px-5 py-2 text-sm font-medium text-primary transition hover:bg-neutral-50"
           >
             View All
