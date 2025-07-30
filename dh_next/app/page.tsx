@@ -1,55 +1,23 @@
-import { ArticleTeaser } from "@/components/drupal/ArticleTeaser"
-import { drupal } from "@/lib/drupal"
+import { Hero } from "@/components/sections/Hero"
+import { FeaturedCategories } from "@/components/sections/FeaturedCategories"
+import { FeaturedProducts } from "@/components/sections/FeaturedProducts"
+import { Testimonials } from "@/components/sections/Testimonials"
+import { Newsletter } from "@/components/sections/Newsletter"
 import type { Metadata } from "next"
 import type { DrupalArticle } from "@/types"
 
 export const metadata: Metadata = {
-  description: "A Next.js site powered by a Drupal backend.",
+  description: "Shop premium indoor plants, planters, and plant care accessories for your home or office.",
 }
 
-export default async function Home() {
-  // Fetch the first 10 articles.
-  const data = await drupal.query<{
-    nodeArticles: {
-      nodes: DrupalArticle[]
-    }
-  }>({
-    query: `
-      query {
-        nodeArticles(first: 10) {
-          nodes {
-            id
-            title
-            path
-            author {
-              name
-            }
-            description {
-              processed
-            }
-            created {
-              time
-            }
-          }
-        }
-      }
-    `,
-  })
-  const nodes = data?.nodeArticles?.nodes ?? []
-
+export default function Home() {
   return (
     <>
-      <h1 className="mb-10 text-6xl font-black">Latest Articles.</h1>
-      {nodes?.length ? (
-        nodes.map((node) => (
-          <div key={node.id}>
-            <ArticleTeaser node={node} />
-            <hr className="my-20" />
-          </div>
-        ))
-      ) : (
-        <p className="py-4">No nodes found</p>
-      )}
+      <Hero />
+      <FeaturedCategories />
+      <FeaturedProducts />
+      <Testimonials />
+      <Newsletter />
     </>
   )
 }

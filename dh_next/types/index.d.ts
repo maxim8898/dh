@@ -12,6 +12,7 @@ export type Image = {
   width: number
   height: number
   url: string
+  alt: string
 }
 
 export type Author = {
@@ -43,4 +44,16 @@ export type DrupalArticle = {
     time: string
   }
   image: Image
+}
+
+export type DrupalProduct = {
+  __typename: "NodePlant"
+  id: string
+  status: boolean
+  title: string
+  path: string
+  body: {
+    processed: string
+  }
+  images: Image[]
 }

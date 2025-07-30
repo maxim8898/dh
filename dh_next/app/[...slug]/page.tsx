@@ -4,52 +4,72 @@ import { Article } from "@/components/drupal/Article"
 import { BasicPage } from "@/components/drupal/BasicPage"
 import { drupal } from "@/lib/drupal"
 import type { Metadata, ResolvingMetadata } from "next"
-import type { DrupalArticle, DrupalPage, NodesPath } from "@/types"
+import type { DrupalArticle, DrupalPage, DrupalProduct, NodesPath } from "@/types"
+import { Plant } from "@/components/drupal/Plant"
 
 async function getNode(slug: string[]) {
   const path = `/${slug.join("/")}`
 
-  const data = await drupal.query<{
-    route: { entity: DrupalArticle | DrupalPage }
-  }>({
-    query: `query ($path: String!){
-      route(path: $path) {
-        ... on RouteInternal {
-          entity {
-            ... on NodeArticle {
-              __typename
-              id
-              title
-              path
-              author {
-                name
+  try {
+    const data = await drupal.query<{
+      route: { entity: DrupalArticle | DrupalPage | DrupalProduct }
+    }>({
+      query: `query ($path: String!){
+        route(path: $path) {
+          ... on RouteInternal {
+            entity {
+              ... on NodePlant {
+                __typename
+                id
+                title
+                path
+                body {
+                  value
+                  processed
+                  format
+                }
+                images {
+                  alt
+                  url
+                }
               }
-              description {
-                processed
-              }
-              status
-              created {
-                time
+              ... on NodeArticle {
+                __typename
+                id
+                title
+                path
+                author {
+                  name
+                }
+                description {
+                  processed
+                }
+                status
+                created {
+                  time
+                }
               }
             }
           }
         }
-      }
-    }`,
-    variables: {
-      path,
-    },
-  })
-
-  const resource = data?.route?.entity
-
-  if (!resource) {
-    throw new Error(`Failed to fetch resource: ${path}`, {
-      cause: "DrupalError",
+      }`,
+      variables: {
+        path,
+      },
     })
-  }
 
-  return resource
+    const resource = data?.route?.entity
+
+    if (!resource) {
+      throw new Error(`Failed to fetch resource: ${path}`, {
+        cause: "DrupalError",
+      })
+    }
+
+    return resource
+  } catch (error) {
+    throw error
+  }
 }
 
 type NodePageParams = {
@@ -61,9 +81,10 @@ type NodePageProps = {
 }
 
 export async function generateMetadata(
-  { params: { slug } }: NodePageProps,
+  props: any,
   _: ResolvingMetadata
 ): Promise<Metadata> {
+  const { params: { slug } } = props;
   let node
   try {
     node = await getNode(slug)
@@ -78,45 +99,66 @@ export async function generateMetadata(
 }
 
 export async function generateStaticParams(): Promise<NodePageParams[]> {
-  // Fetch the paths for the first 50 articles and pages.
-  // We'll fall back to on-demand generation for the rest.
-  const data = await drupal.query<{
-    nodeArticles: NodesPath
-  }>({
-    query: `query {
-      nodeArticles(first: 50) {
-        nodes {
-          path,
+  try {
+    // Fetch the paths for the first 50 articles.
+    // We'll fall back to on-demand generation for the rest.
+    const data = await drupal.query<{
+      nodeArticles: NodesPath
+    }>({
+      query: `query {
+        nodeArticles(first: 50) {
+          nodes {
+            path,
+          }
         }
-      }
-    }`,
-  })
+      }`,
+    })
 
-  return [
-    ...(data?.nodeArticles?.nodes as { path: string }[]),
-  ].map(({ path }) => ({ slug: path.split("/").filter(Boolean) }))
+    if (!data?.nodeArticles?.nodes) {
+      return []
+    }
+
+    const paths = [
+      ...(data.nodeArticles.nodes as { path: string }[]),
+    ].map(({ path }) => ({ slug: path.split("/").filter(Boolean) }))
+
+    return paths
+  } catch (error) {
+    // Return empty array to avoid build failure
+    return []
+  }
 }
 
-export default async function Page({ params: { slug } }: NodePageProps) {
-  const draft = await draftMode()
-  const isDraftMode = draft.isEnabled
-
-  let node
+export default async function Page(
+  props: any
+) {
   try {
-    node = await getNode(slug)
+    const { params: { slug } } = props;
+
+    const draft = await draftMode()
+    const isDraftMode = draft.isEnabled
+
+    let node
+    try {
+      node = await getNode(slug)
+    } catch (error) {
+      // If getNode throws an error, tell Next.js the path is 404.
+      notFound()
+    }
+
+    // If we're not in draft mode and the resource is not published, return a 404.
+    if (!isDraftMode && node?.status === false) {
+      notFound()
+    }
+
+    return (
+      <>
+        {node.__typename === "NodeArticle" && <Article node={node} />}
+        {node.__typename === "NodePage" && <BasicPage node={node} />}
+        {node.__typename === "NodePlant" && <Plant node={node} />}
+      </>
+    )
   } catch (error) {
-    // If getNode throws an error, tell Next.js the path is 404.
-    notFound()
+    throw error
   }
-
-  // If we're not in draft mode and the resource is not published, return a 404.
-  if (!isDraftMode && node?.status === false) {
-    notFound()
-  }
-
-  return (
-    <>
-      {node.__typename === "NodeArticle" && <Article node={node} />}
-    </>
-  )
 }

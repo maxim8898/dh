@@ -1,4 +1,7 @@
 /** @type {import('next').NextConfig} */
+// Disable SSL certificate verification for development
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -10,6 +13,7 @@ const nextConfig = {
         // pathname: '/sites/default/files/**',
       },
     ],
+    domains: ['images.unsplash.com'],
   },
 }
 

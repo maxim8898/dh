@@ -16,9 +16,11 @@
     "next": "^15.1.2",
     "next-drupal": "^2.0.0-beta.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "swiper": "^11.2.10"
   },
   "devDependencies": {
+    "@tailwindcss/forms": "^0.5.7",
     "@tailwindcss/typography": "^0.5.12",
     "@types/node": "^20.12.7",
     "@types/react": "^19.0.0",
