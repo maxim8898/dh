@@ -9,6 +9,7 @@ import { Plant } from "@/components/drupal/Plant"
 
 async function getNode(slug: string[]) {
   const path = `/${slug.join("/")}`
+  console.log(slug);
 
   try {
     const data = await drupal.query<{
@@ -84,7 +85,8 @@ export async function generateMetadata(
   props: any,
   _: ResolvingMetadata
 ): Promise<Metadata> {
-  const { params: { slug } } = props;
+  const { params } = props;
+  const { slug } =  await params;
   let node
   try {
     node = await getNode(slug)
@@ -133,7 +135,8 @@ export default async function Page(
   props: any
 ) {
   try {
-    const { params: { slug } } = props;
+    const { params } = props;
+    const { slug } = await params;
 
     const draft = await draftMode()
     const isDraftMode = draft.isEnabled

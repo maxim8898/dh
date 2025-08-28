@@ -7,28 +7,28 @@ export function FeaturedCategories() {
       name: "Indoor Plants",
       description: "Perfect for brightening up your living space",
       image: "https://images.unsplash.com/photo-1463320898484-cdee8141c787?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
-      path: "#"
+      path: "/products?category=indoor-plants"
     },
     {
       id: "outdoor-plants",
       name: "Outdoor Plants",
       description: "Enhance your garden or balcony",
       image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
-      path: "#"
+      path: "/products?category=outdoor-plants"
     },
     {
       id: "succulents",
       name: "Succulents",
       description: "Low-maintenance plants for busy people",
       image: "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
-      path: "#"
+      path: "/products?category=succulents"
     },
     {
       id: "planters",
       name: "Planters",
       description: "Stylish pots and containers for your plants",
       image: "https://images.unsplash.com/photo-1485955900006-10f4d324d411?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
-      path: "#"
+      path: "/products?category=planters"
     }
   ];
 
