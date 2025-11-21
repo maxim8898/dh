@@ -1,0 +1,18 @@
+type CommerceProduct {
+  id: Int!
+  title: String
+  sku: String
+}
+
+type CommerceStore {
+  id: Int!
+  name: String
+}
+
+type CartItem {
+  id: String!
+  productId: String!
+  quantity: Int!
+  product: CommerceProduct
+  addedAt: String!
+}

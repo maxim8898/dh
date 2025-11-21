@@ -1,0 +1,8 @@
+extend type Query {
+  commerceProducts(offset: Int, limit: Int): [CommerceProduct]
+  commerceStores(offset: Int, limit: Int): [CommerceStore]
+}
+
+extend type Mutation {
+  addToCart(productId: String!, quantity: Int = 1): CartItem
+}

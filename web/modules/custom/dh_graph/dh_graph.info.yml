@@ -1,0 +1,11 @@
+name: 'DH Commerce GraphQL'
+type: module
+description: 'Exposes Commerce entities to GraphQL'
+core_version_requirement: ^11
+package: Custom
+dependencies:
+  - graphql:graphql
+  - graphql_compose:graphql_compose
+  - commerce:commerce
+  - commerce:commerce_product
+  - commerce:commerce_store

@@ -44,14 +44,14 @@ export function HeaderNav() {
                 </button>
 
                 {/* Cart */}
-                <button className="block text-neutral-600 hover:text-primary relative">
+                <Link href="/cart" className="block text-neutral-600 hover:text-primary relative">
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                   <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
                     0
                   </span>
-                </button>
+                </Link>
               </div>
             </div>
           </div>
@@ -59,14 +59,14 @@ export function HeaderNav() {
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-4 md:hidden">
             {/* Cart (Mobile) */}
-            <button className="text-neutral-600 hover:text-primary relative">
+            <Link href="/cart" className="text-neutral-600 hover:text-primary relative">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
               <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
                 0
               </span>
-            </button>
+            </Link>
 
             {/* Mobile Menu Toggle */}
             <button

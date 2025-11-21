@@ -24,23 +24,45 @@ export class NextDrupalGraphQL extends NextDrupalBase {
   }
 
   async query<DataType>(payload: QueryPayload) {
-    const response = await this.fetch(this.endpoint, {
+    console.log('GraphQL Query:', {
+      endpoint: this.endpoint,
+      payload: payload,
+      withAuth: !!this.auth
+    })
+
+    // Use native fetch to avoid NextDrupalBase authentication issues
+    const response = await fetch(this.endpoint, {
       method: "POST",
       body: JSON.stringify(payload),
-      withAuth: true, // Make authenticated requests using OAuth.
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      credentials: 'omit', // Don't send credentials to avoid CORS issues
+    })
+
+    console.log('GraphQL Response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
     })
 
     if (!response?.ok) {
-      throw new Error(response.statusText)
+      const errorText = await response.text()
+      console.error('GraphQL Error Response:', errorText)
+      throw new Error(`GraphQL request failed: ${response.status} ${response.statusText}`)
     }
 
     const { data, errors }: QueryJsonResponse<DataType> = await response.json()
 
     if (errors) {
+      console.error('GraphQL Errors:', errors)
       this.logger.log(errors)
       throw new Error(errors?.map((e) => e.message).join("\n") ?? "unknown")
     }
 
+    console.log('GraphQL Success:', data)
     return data
   }
 
@@ -57,7 +79,7 @@ export class NextDrupalGraphQL extends NextDrupalBase {
 
 type QueryPayload = {
   query: string
-  variables?: Record<string, string>
+  variables?: Record<string, any>
 }
 
 type QueryJsonResponse<DataType> = {
