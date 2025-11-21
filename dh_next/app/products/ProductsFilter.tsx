@@ -4,16 +4,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 
 interface ProductsFilterProps {
   selectedCategories: string[]
+  availableCategories?: Array<{ id: string; name: string; count: number }>
 }
 
-const categories = [
-  { id: "indoor-plants", name: "Indoor Plants" },
-  { id: "outdoor-plants", name: "Outdoor Plants" },
-  { id: "succulents", name: "Succulents" },
-  { id: "planters", name: "Planters" },
-]
-
-export function ProductsFilter({ selectedCategories }: ProductsFilterProps) {
+export function ProductsFilter({ selectedCategories, availableCategories }: ProductsFilterProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -57,17 +51,24 @@ export function ProductsFilter({ selectedCategories }: ProductsFilterProps) {
       </div>
       
       <div className="space-y-3">
-        {categories.map((category) => (
-          <label key={category.id} className="flex items-center space-x-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={selectedCategories.includes(category.id)}
-              onChange={(e) => handleCategoryChange(category.id, e.target.checked)}
-              className="h-4 w-4 rounded border-neutral-300 text-primary focus:ring-primary focus:ring-offset-0"
-            />
-            <span className="text-sm text-neutral-700">{category.name}</span>
-          </label>
-        ))}
+        {availableCategories && availableCategories.length > 0 ? (
+          availableCategories.map((category) => (
+            <label key={category.id} className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.includes(category.id)}
+                  onChange={(e) => handleCategoryChange(category.id, e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-300 text-primary focus:ring-primary focus:ring-offset-0"
+                />
+                <span className="text-sm text-neutral-700">{category.name}</span>
+              </div>
+              <span className="text-xs text-neutral-500">({category.count})</span>
+            </label>
+          ))
+        ) : (
+          <p className="text-sm text-neutral-500">No categories available</p>
+        )}
       </div>
     </div>
   )

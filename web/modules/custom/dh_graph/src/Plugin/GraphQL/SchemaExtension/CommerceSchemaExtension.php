@@ -93,6 +93,16 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
       })
     );
 
+    // Query for single product by ID.
+    $registry->addFieldResolver('Query', 'commerceProduct',
+      $builder->callback(function ($value, $args, $context, $info) {
+        $entityTypeManager = \Drupal::entityTypeManager();
+        $storage = $entityTypeManager->getStorage('commerce_product');
+        $product = $storage->load($args['id']);
+        return $product;
+      })
+    );
+
     // Query for stores.
     $registry->addFieldResolver('Query', 'commerceStores',
       $builder->callback(function ($value, $args, $context, $info) {
@@ -209,12 +219,27 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
     $registry->addFieldResolver('CommerceProduct', 'category',
       $builder->callback(function ($value, $args, $context, $info) {
         $product = $value;
+
         if ($product && $product->hasField('field_category') && !$product->get('field_category')->isEmpty()) {
-          $term = $product->get('field_category')->entity;
-          if ($term) {
-            return $term->label();
-          }
+          // Get the field value (machine name)
+          $category_value = $product->get('field_category')->value;
+
+          // Get the field definition to access allowed values
+          $field_definition = $product->getFieldDefinition('field_category');
+          $allowed_values = $field_definition->getSetting('allowed_values');
+
+          // Return the label if available, otherwise return the value
+          $category_label = isset($allowed_values[$category_value]) ? $allowed_values[$category_value] : $category_value;
+
+          \Drupal::logger('dh_graph')->info('Category for @product: value=@value, label=@label', [
+            '@product' => $product->label(),
+            '@value' => $category_value,
+            '@label' => $category_label,
+          ]);
+
+          return $category_label;
         }
+
         return null;
       })
     );

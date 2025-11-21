@@ -1,5 +1,6 @@
 extend type Query {
   commerceProducts(offset: Int, limit: Int): [CommerceProduct]
+  commerceProduct(id: Int!): CommerceProduct
   commerceStores(offset: Int, limit: Int): [CommerceStore]
   cart: CartData
 }

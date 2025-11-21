@@ -56,6 +56,14 @@ async function getProducts() {
 
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const products = await getProducts()
+
+  // Debug: log categories
+  console.log('=== PRODUCTS DEBUG ===')
+  console.log('Total products fetched:', products.length)
+  console.log('Full products data:', JSON.stringify(products, null, 2))
+  products.forEach(p => console.log(`Product: ${p.title}, Category: "${p.category}"`))
+  console.log('=== END DEBUG ===')
+
   const resolvedSearchParams = await searchParams
   const sortBy = (resolvedSearchParams.sort as string) || "title-asc"
   const selectedCategories = Array.isArray(resolvedSearchParams.category)
@@ -64,11 +72,18 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       ? [resolvedSearchParams.category]
       : []
 
+  // Helper to convert category to slug format
+  const categoryToSlug = (category: string) => {
+    return category.toLowerCase().replace(/\s+/g, '-')
+  }
+
   const filterProducts = (products: CommerceProduct[], categories: string[]) => {
     if (categories.length === 0) return products
-    return products.filter(product =>
-      product.category && categories.includes(product.category)
-    )
+    return products.filter(product => {
+      if (!product.category) return false
+      const productCategorySlug = categoryToSlug(product.category)
+      return categories.includes(productCategorySlug)
+    })
   }
 
   const sortProducts = (products: CommerceProduct[], sortOption: string) => {
@@ -91,6 +106,25 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const filteredProducts = filterProducts(products, selectedCategories)
   const sortedProducts = sortProducts(filteredProducts, sortBy)
 
+  // Get available categories from products
+  const categoryMap = new Map<string, { name: string; count: number }>()
+  products.forEach(product => {
+    if (product.category) {
+      const slug = categoryToSlug(product.category)
+      const existing = categoryMap.get(slug)
+      if (existing) {
+        existing.count++
+      } else {
+        categoryMap.set(slug, { name: product.category, count: 1 })
+      }
+    }
+  })
+  const availableCategories = Array.from(categoryMap.entries()).map(([id, data]) => ({
+    id,
+    name: data.name,
+    count: data.count,
+  })).sort((a, b) => a.name.localeCompare(b.name))
+
   return (
     <div className="py-12">
       {/* Header */}
@@ -107,7 +141,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
         {/* Filter Sidebar */}
         <div className="lg:col-span-1">
-          <ProductsFilter selectedCategories={selectedCategories} />
+          <ProductsFilter
+            selectedCategories={selectedCategories}
+            availableCategories={availableCategories}
+          />
         </div>
         
         {/* Products Section */}
