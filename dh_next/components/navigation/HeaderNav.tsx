@@ -20,8 +20,8 @@ export function HeaderNav() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex md:items-center md:gap-8">
             <nav className="flex gap-6 text-sm font-medium">
-              <Link href="#" className="text-neutral-700 hover:text-primary">Home</Link>
-              <Link href="#" className="text-neutral-700 hover:text-primary">Shop</Link>
+              <Link href="/" className="text-neutral-700 hover:text-primary">Home</Link>
+              <Link href="/products" className="text-neutral-700 hover:text-primary">Products</Link>
               <Link href="#" className="text-neutral-700 hover:text-primary">Collections</Link>
               <Link href="#" className="text-neutral-700 hover:text-primary">About</Link>
               <Link href="#" className="text-neutral-700 hover:text-primary">Contact</Link>

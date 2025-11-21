@@ -23,16 +23,27 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
   public function registerResolvers(ResolverRegistryInterface $registry) {
     $builder = new ResolverBuilder();
 
-    // Helper functions for cart management
-    $getCartFromSession = function() {
-      $tempstore = \Drupal::service('tempstore.private')->get('dh_graph');
-      $cart = $tempstore->get('cart');
-      return $cart ?: [];
-    };
+    // Helper function to get or create cart for current user
+    $getCart = function() {
+      $cart_provider = \Drupal::service('commerce_cart.cart_provider');
+      $cart_manager = \Drupal::service('commerce_cart.cart_manager');
+      $store_storage = \Drupal::entityTypeManager()->getStorage('commerce_store');
 
-    $saveCartToSession = function($cart) {
-      $tempstore = \Drupal::service('tempstore.private')->get('dh_graph');
-      $tempstore->set('cart', $cart);
+      // Get the default store
+      $stores = $store_storage->loadMultiple();
+      $store = reset($stores);
+
+      if (!$store) {
+        throw new \Exception('No store available');
+      }
+
+      // Get current user's cart or create new one
+      $cart = $cart_provider->getCart('default', $store);
+      if (!$cart) {
+        $cart = $cart_provider->createCart('default', $store);
+      }
+
+      return $cart;
     };
 
     $getProductDetails = function($productId) {
@@ -262,75 +273,102 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
 
     // Cart query.
     $registry->addFieldResolver('Query', 'cart',
-      $builder->callback(function ($value, $args, $context, $info) use ($getCartFromSession, $getProductDetails) {
-        $cart = $getCartFromSession();
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart, $getProductDetails) {
+        try {
+          $cart = $getCart();
 
-        $timestamp = time();
-        \Drupal::logger('dh_graph')->info('Cart query at @time - Retrieved from session: @cart', [
-          '@time' => $timestamp,
-          '@cart' => print_r($cart, TRUE),
-        ]);
-
-        $items = [];
-        $totalItems = 0;
-        $totalPrice = 0.0;
-
-        foreach ($cart as $cartItem) {
-          \Drupal::logger('dh_graph')->info('Processing cart item: @item', [
-            '@item' => print_r($cartItem, TRUE),
+          \Drupal::logger('dh_graph')->info('Cart query - Loading Commerce cart: @id', [
+            '@id' => $cart->id(),
           ]);
 
-          $productDetails = $getProductDetails($cartItem['productId']);
+          $items = [];
+          $totalItems = 0;
+          $totalPrice = 0.0;
 
-          \Drupal::logger('dh_graph')->info('Product details: @details', [
-            '@details' => print_r($productDetails, TRUE),
-          ]);
+          // Get order items from the cart
+          foreach ($cart->getItems() as $order_item) {
+            $purchased_entity = $order_item->getPurchasedEntity();
 
-          if ($productDetails) {
-            $itemTotal = $productDetails['price'] * $cartItem['quantity'];
+            if (!$purchased_entity) {
+              continue;
+            }
+
+            // Get the product from the variation
+            $product = $purchased_entity->getProduct();
+
+            if (!$product) {
+              continue;
+            }
+
+            $unit_price = $order_item->getUnitPrice();
+            $quantity = (int) $order_item->getQuantity();
+            $total_price = $order_item->getTotalPrice();
+
+            // Get product image
+            $image = '';
+            if ($product->hasField('field_images') && !$product->get('field_images')->isEmpty()) {
+              $imageField = $product->get('field_images')->first();
+              if ($imageField && $imageField->entity) {
+                $fileUri = $imageField->entity->getFileUri();
+                $image = \Drupal::service('file_url_generator')->generateAbsoluteString($fileUri);
+              }
+            }
+
             $items[] = [
-              'id' => $cartItem['id'],
-              'productId' => $cartItem['productId'],
-              'quantity' => $cartItem['quantity'],
-              'addedAt' => $cartItem['addedAt'],
-              'product' => $productDetails,
+              'id' => (string) $order_item->id(),
+              'productId' => $product->uuid(),
+              'quantity' => $quantity,
+              'addedAt' => date('c', $order_item->getCreatedTime()),
+              'product' => [
+                'id' => $product->uuid(),
+                'title' => $product->label(),
+                'sku' => $purchased_entity->getSku(),
+                'price' => $unit_price ? (float) $unit_price->getNumber() : 0.0,
+                'image' => $image,
+              ],
             ];
-            $totalItems += $cartItem['quantity'];
-            $totalPrice += $itemTotal;
-          } else {
-            \Drupal::logger('dh_graph')->warning('Product not found for ID: @id', [
-              '@id' => $cartItem['productId'],
-            ]);
+
+            $totalItems += $quantity;
+            $totalPrice += $total_price ? (float) $total_price->getNumber() : 0.0;
           }
+
+          \Drupal::logger('dh_graph')->info('Cart query - Final result: @items items, total: @total', [
+            '@items' => $totalItems,
+            '@total' => $totalPrice,
+          ]);
+
+          $result = [
+            'items' => $items,
+            'totalItems' => $totalItems,
+            'totalPrice' => $totalPrice,
+          ];
+
+          // Add cache context to vary by session
+          if (method_exists($context, 'addCacheableDependency')) {
+            $cache_metadata = new \Drupal\Core\Cache\CacheableMetadata();
+            $cache_metadata->setCacheMaxAge(0);
+            $cache_metadata->addCacheContexts(['session', 'user']);
+            $context->addCacheableDependency($cache_metadata);
+          }
+
+          return $result;
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Cart query error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+
+          return [
+            'items' => [],
+            'totalItems' => 0,
+            'totalPrice' => 0.0,
+          ];
         }
-
-        \Drupal::logger('dh_graph')->info('Cart query - Final result: @items items, total: @total', [
-          '@items' => $totalItems,
-          '@total' => $totalPrice,
-        ]);
-
-        // Add cache metadata to disable caching for cart data
-        $result = [
-          'items' => $items,
-          'totalItems' => $totalItems,
-          'totalPrice' => $totalPrice,
-        ];
-
-        // Add cache context to vary by session
-        if (method_exists($context, 'addCacheableDependency')) {
-          $cache_metadata = new \Drupal\Core\Cache\CacheableMetadata();
-          $cache_metadata->setCacheMaxAge(0);
-          $cache_metadata->addCacheContexts(['session']);
-          $context->addCacheableDependency($cache_metadata);
-        }
-
-        return $result;
       })
     );
 
     // Add to cart mutation.
     $registry->addFieldResolver('Mutation', 'addToCart',
-      $builder->callback(function ($value, $args, $context, $info) use ($getCartFromSession, $saveCartToSession) {
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart) {
         $productId = $args['productId'];
         $quantity = $args['quantity'] ?? 1;
 
@@ -339,89 +377,158 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
           '@quantity' => $quantity,
         ]);
 
-        $cart = $getCartFromSession();
-        \Drupal::logger('dh_graph')->info('Current cart contents: @cart', [
-          '@cart' => print_r($cart, TRUE),
-        ]);
+        try {
+          $cart_manager = \Drupal::service('commerce_cart.cart_manager');
+          $entity_type_manager = \Drupal::entityTypeManager();
 
-        // Check if product already exists in cart
-        $existingItemKey = null;
-        foreach ($cart as $key => $item) {
-          if ($item['productId'] === $productId) {
-            $existingItemKey = $key;
-            break;
+          // Load product by UUID
+          $product_storage = $entity_type_manager->getStorage('commerce_product');
+          $products = $product_storage->loadByProperties(['uuid' => $productId]);
+
+          if (empty($products)) {
+            throw new \Exception('Product not found');
           }
-        }
 
-        if ($existingItemKey !== null) {
-          // Update quantity if product already in cart
-          $cart[$existingItemKey]['quantity'] += $quantity;
-          $cartItem = $cart[$existingItemKey];
-        } else {
-          // Add new item to cart
-          $cartItem = [
-            'id' => uniqid('cart_item_'),
+          $product = reset($products);
+          $variations = $product->getVariations();
+
+          if (empty($variations)) {
+            throw new \Exception('Product has no variations');
+          }
+
+          // Get the first variation (or you could add variation selection logic)
+          $variation = reset($variations);
+
+          // Get or create cart
+          $cart = $getCart();
+
+          // Add item to cart (will combine with existing if already present)
+          $order_items = $cart_manager->addEntity($cart, $variation, $quantity);
+
+          \Drupal::logger('dh_graph')->info('addEntity returned: @result', [
+            '@result' => print_r($order_items, TRUE),
+          ]);
+
+          // addEntity returns array of order item entities
+          $order_item = reset($order_items);
+
+          \Drupal::logger('dh_graph')->info('Order item after reset: @type - @value', [
+            '@type' => gettype($order_item),
+            '@value' => is_object($order_item) ? get_class($order_item) : (string) $order_item,
+          ]);
+
+          // addEntity actually returns order item entities directly, not IDs
+          if (!is_object($order_item)) {
+            // If we somehow got an ID, try to load it
+            $order_item_storage = \Drupal::entityTypeManager()->getStorage('commerce_order_item');
+            $order_item = $order_item_storage->load($order_item);
+          }
+
+          if (!$order_item || !is_object($order_item)) {
+            \Drupal::logger('dh_graph')->error('Order item is not an object: @item', [
+              '@item' => print_r($order_item, TRUE),
+            ]);
+            throw new \Exception('Failed to create order item');
+          }
+
+          \Drupal::logger('dh_graph')->info('Added to Commerce cart: Order item @id', [
+            '@id' => $order_item->id(),
+          ]);
+
+          return [
+            'id' => (string) $order_item->id(),
             'productId' => $productId,
-            'quantity' => $quantity,
-            'addedAt' => date('c'),
+            'quantity' => (int) $order_item->getQuantity(),
+            'addedAt' => date('c', $order_item->getCreatedTime()),
           ];
-          $cart[] = $cartItem;
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Add to cart error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+          throw $e;
         }
-
-        $saveCartToSession($cart);
-
-        \Drupal::logger('dh_graph')->info('Cart after adding: @cart', [
-          '@cart' => print_r($cart, TRUE),
-        ]);
-
-        return $cartItem;
       })
     );
 
     // Update cart item mutation.
     $registry->addFieldResolver('Mutation', 'updateCartItem',
-      $builder->callback(function ($value, $args, $context, $info) use ($getCartFromSession, $saveCartToSession) {
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart) {
         $itemId = $args['itemId'];
         $quantity = $args['quantity'];
 
-        $cart = $getCartFromSession();
+        try {
+          $cart_manager = \Drupal::service('commerce_cart.cart_manager');
+          $order_item_storage = \Drupal::entityTypeManager()->getStorage('commerce_order_item');
 
-        foreach ($cart as $key => $item) {
-          if ($item['id'] === $itemId) {
-            $cart[$key]['quantity'] = $quantity;
-            $saveCartToSession($cart);
-            return $cart[$key];
+          // Load the order item
+          $order_item = $order_item_storage->load($itemId);
+
+          if (!$order_item) {
+            throw new \Exception('Cart item not found');
           }
-        }
 
-        throw new \Exception("Cart item not found");
+          // Update quantity
+          $cart_manager->updateOrderItem($order_item, ['quantity' => $quantity]);
+
+          return [
+            'id' => (string) $order_item->id(),
+            'quantity' => (int) $order_item->getQuantity(),
+          ];
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Update cart item error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+          throw $e;
+        }
       })
     );
 
     // Remove from cart mutation.
     $registry->addFieldResolver('Mutation', 'removeFromCart',
-      $builder->callback(function ($value, $args, $context, $info) use ($getCartFromSession, $saveCartToSession) {
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart) {
         $itemId = $args['itemId'];
 
-        $cart = $getCartFromSession();
+        try {
+          $cart_manager = \Drupal::service('commerce_cart.cart_manager');
+          $order_item_storage = \Drupal::entityTypeManager()->getStorage('commerce_order_item');
 
-        foreach ($cart as $key => $item) {
-          if ($item['id'] === $itemId) {
-            unset($cart[$key]);
-            $saveCartToSession(array_values($cart));
-            return true;
+          // Load the order item
+          $order_item = $order_item_storage->load($itemId);
+
+          if (!$order_item) {
+            throw new \Exception('Cart item not found');
           }
-        }
 
-        return false;
+          $cart = $getCart();
+          $cart_manager->removeOrderItem($cart, $order_item);
+
+          return true;
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Remove from cart error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+          return false;
+        }
       })
     );
 
     // Clear cart mutation.
     $registry->addFieldResolver('Mutation', 'clearCart',
-      $builder->callback(function ($value, $args, $context, $info) use ($saveCartToSession) {
-        $saveCartToSession([]);
-        return true;
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart) {
+        try {
+          $cart_manager = \Drupal::service('commerce_cart.cart_manager');
+          $cart = $getCart();
+
+          // Empty the cart
+          $cart_manager->emptyCart($cart);
+
+          return true;
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Clear cart error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+          return false;
+        }
       })
     );
 
