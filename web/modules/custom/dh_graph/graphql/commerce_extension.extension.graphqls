@@ -1,8 +1,12 @@
 extend type Query {
   commerceProducts(offset: Int, limit: Int): [CommerceProduct]
   commerceStores(offset: Int, limit: Int): [CommerceStore]
+  cart: CartData
 }
 
 extend type Mutation {
   addToCart(productId: String!, quantity: Int = 1): CartItem
+  updateCartItem(itemId: String!, quantity: Int!): CartItem
+  removeFromCart(itemId: String!): Boolean
+  clearCart: Boolean
 }

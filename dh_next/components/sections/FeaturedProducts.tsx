@@ -1,37 +1,41 @@
 import { ProductCard } from "@/components/products/ProductCard"
 import { drupal } from "@/lib/drupal"
 import { Link } from "@/components/navigation/Link"
-import type { DrupalProduct } from "@/types"
+
+interface CommerceProduct {
+  id: number
+  uuid: string
+  title: string
+  sku: string
+  price: number
+  body: string | null
+  path: string
+  images: string[]
+  category: string | null
+}
 
 export async function FeaturedProducts() {
 
   const data = await drupal.query<{
-    nodePlants: {
-      nodes: DrupalProduct[]
-    }
+    commerceProducts: CommerceProduct[]
   }>({
     query: `
       query {
-        nodePlants(first: 5) {
-          nodes {
-            title
-            id
-            path
-            body {
-              value
-              processed
-              format
-            }
-            images {
-              alt
-              url
-            }
-          }
+        commerceProducts(limit: 8) {
+          id
+          uuid
+          title
+          sku
+          price
+          body
+          path
+          images
+          category
         }
       }
     `,
   })
-  const nodes = data?.nodePlants?.nodes ?? []
+  const products = data?.commerceProducts ?? []
 
   return (
     <section className="py-12 bg-white sm:py-16 lg:py-20">
@@ -67,14 +71,14 @@ export async function FeaturedProducts() {
         </div>
 
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {nodes.map((product) => (
+          {products.slice(0, 4).map((product) => (
             <ProductCard
-              key={product.id}
-              id={product.id}
+              key={product.uuid}
+              id={product.uuid}
               title={product.title}
-              price={99.99}
-              image={product.images[0].url}
-              category={"Super"}
+              price={product.price || 0}
+              image={product.images?.[0] || "/placeholder-image.jpg"}
+              category={product.category || "Uncategorized"}
               path={product.path}
             />
           ))}

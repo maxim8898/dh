@@ -4,7 +4,6 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Link } from "@/components/navigation/Link"
 import { drupal } from "@/lib/drupal"
-import type { Metadata } from "next"
 
 interface CartItem {
   id: string
@@ -35,58 +34,71 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetchCartData()
-  }, [])
-
-  const fetchCartData = async () => {
+  const fetchCartData = async (showLoading = true) => {
     try {
-      setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+      }
       setError(null)
-      
-      // For now, we'll use mock data since we don't have a cart query yet
-      // In a real implementation, you would query the cart from Drupal
-      const mockCartData: CartData = {
-        items: [
-          {
-            id: "1",
-            productId: "product-1",
-            quantity: 2,
-            addedAt: new Date().toISOString(),
-            product: {
-              id: "product-1",
-              title: "Monstera Deliciosa",
-              sku: "MON-001",
-              price: 89.99,
-              image: "/placeholder-image.jpg"
-            }
-          },
-          {
-            id: "2", 
-            productId: "product-2",
-            quantity: 1,
-            addedAt: new Date().toISOString(),
-            product: {
-              id: "product-2",
-              title: "Fiddle Leaf Fig",
-              sku: "FLF-002",
-              price: 129.99,
-              image: "/placeholder-image.jpg"
+
+      // Add timestamp to force fresh fetch
+      const timestamp = Date.now()
+      console.log(`Fetching cart data at ${timestamp}`)
+
+      const result = await drupal.query<{ cart: CartData }>({
+        query: `
+          query {
+            cart {
+              items {
+                id
+                productId
+                quantity
+                addedAt
+                product {
+                  id
+                  title
+                  sku
+                  price
+                  image
+                }
+              }
+              totalItems
+              totalPrice
             }
           }
-        ],
-        totalItems: 3,
-        totalPrice: 309.97
-      }
+        `,
+      })
 
-      setCartData(mockCartData)
+      console.log('Received cart result:', result)
+
+      if (result?.cart) {
+        console.log('Setting cart data:', result.cart)
+        setCartData(result.cart)
+      } else {
+        console.log('No cart data, setting empty cart')
+        setCartData({
+          items: [],
+          totalItems: 0,
+          totalPrice: 0
+        })
+      }
     } catch (err) {
       console.error("Error fetching cart data:", err)
       setError("Failed to load cart data")
     } finally {
+      console.log('Loading complete')
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    console.log('CartPage mounted, fetching cart data...')
+    fetchCartData()
+  }, [])
+
+  useEffect(() => {
+    console.log('CartData state updated:', cartData)
+  }, [cartData])
 
   const updateQuantity = async (itemId: string, newQuantity: number) => {
     if (newQuantity < 1) {
@@ -95,53 +107,86 @@ export default function CartPage() {
     }
 
     try {
-      // In a real implementation, you would call a GraphQL mutation to update the cart
-      setCartData(prev => ({
-        ...prev,
-        items: prev.items.map(item => 
-          item.id === itemId 
-            ? { ...item, quantity: newQuantity }
-            : item
-        ),
-        totalItems: prev.items.reduce((total, item) => 
-          total + (item.id === itemId ? newQuantity : item.quantity), 0
-        ),
-        totalPrice: prev.items.reduce((total, item) => 
-          total + (item.product.price || 0) * (item.id === itemId ? newQuantity : item.quantity), 0
-        )
-      }))
+      console.log('Updating quantity for item:', itemId, 'to:', newQuantity)
+
+      const result = await drupal.query({
+        query: `
+          mutation UpdateCartItem($itemId: String!, $quantity: Int!) {
+            updateCartItem(itemId: $itemId, quantity: $quantity) {
+              id
+              quantity
+            }
+          }
+        `,
+        variables: {
+          itemId,
+          quantity: newQuantity,
+        },
+      })
+
+      console.log('Update result:', result)
+      console.log('Refreshing cart data...')
+
+      // Refresh cart data after update (don't show loading spinner)
+      await fetchCartData(false)
+
+      console.log('Cart refreshed after update')
     } catch (err) {
       console.error("Error updating quantity:", err)
+      setError("Failed to update quantity")
     }
   }
 
   const removeItem = async (itemId: string) => {
     try {
-      // In a real implementation, you would call a GraphQL mutation to remove the item
-      setCartData(prev => {
-        const updatedItems = prev.items.filter(item => item.id !== itemId)
-        return {
-          ...prev,
-          items: updatedItems,
-          totalItems: updatedItems.reduce((total, item) => total + item.quantity, 0),
-          totalPrice: updatedItems.reduce((total, item) => total + (item.product.price || 0) * item.quantity, 0)
-        }
+      console.log('Removing item:', itemId)
+
+      const result = await drupal.query({
+        query: `
+          mutation RemoveFromCart($itemId: String!) {
+            removeFromCart(itemId: $itemId)
+          }
+        `,
+        variables: {
+          itemId,
+        },
       })
+
+      console.log('Remove result:', result)
+      console.log('Refreshing cart data...')
+
+      // Refresh cart data after removal (don't show loading spinner)
+      await fetchCartData(false)
+
+      console.log('Cart refreshed after removal')
     } catch (err) {
       console.error("Error removing item:", err)
+      setError("Failed to remove item")
     }
   }
 
   const clearCart = async () => {
     try {
-      // In a real implementation, you would call a GraphQL mutation to clear the cart
-      setCartData({
-        items: [],
-        totalItems: 0,
-        totalPrice: 0
+      console.log('Clearing cart...')
+
+      const result = await drupal.query({
+        query: `
+          mutation ClearCart {
+            clearCart
+          }
+        `,
       })
+
+      console.log('Clear result:', result)
+      console.log('Refreshing cart data...')
+
+      // Refresh cart data after clearing (don't show loading spinner)
+      await fetchCartData(false)
+
+      console.log('Cart refreshed after clearing')
     } catch (err) {
       console.error("Error clearing cart:", err)
+      setError("Failed to clear cart")
     }
   }
 

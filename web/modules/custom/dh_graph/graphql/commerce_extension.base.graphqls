@@ -1,7 +1,13 @@
 type CommerceProduct {
   id: Int!
-  title: String
+  uuid: String!
+  title: String!
   sku: String
+  price: Float
+  body: String
+  path: String
+  images: [String!]
+  category: String
 }
 
 type CommerceStore {
@@ -9,10 +15,24 @@ type CommerceStore {
   name: String
 }
 
+type ProductWithDetails {
+  id: String!
+  title: String
+  sku: String
+  price: Float
+  image: String
+}
+
 type CartItem {
   id: String!
   productId: String!
   quantity: Int!
-  product: CommerceProduct
+  product: ProductWithDetails
   addedAt: String!
+}
+
+type CartData {
+  items: [CartItem!]!
+  totalItems: Int!
+  totalPrice: Float!
 }

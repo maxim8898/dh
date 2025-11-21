@@ -38,7 +38,8 @@ export class NextDrupalGraphQL extends NextDrupalBase {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      credentials: 'omit', // Don't send credentials to avoid CORS issues
+      credentials: 'include', // Include credentials to maintain session for cart
+      cache: 'no-store', // Disable Next.js fetch caching
     })
 
     console.log('GraphQL Response:', {

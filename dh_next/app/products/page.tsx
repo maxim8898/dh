@@ -1,6 +1,5 @@
 import { ProductCard } from "@/components/products/ProductCard"
 import { drupal } from "@/lib/drupal"
-import type { DrupalProduct } from "@/types"
 import type { Metadata } from "next"
 import { ProductsSortControls } from "./ProductsSortControls"
 import { ProductsFilter } from "./ProductsFilter"
@@ -10,6 +9,18 @@ export const metadata: Metadata = {
   description: "Browse our complete collection of premium indoor plants",
 }
 
+interface CommerceProduct {
+  id: number
+  uuid: string
+  title: string
+  sku: string
+  price: number
+  body: string | null
+  path: string
+  images: string[]
+  category: string | null
+}
+
 interface ProductsPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
@@ -17,36 +28,26 @@ interface ProductsPageProps {
 async function getProducts() {
   try {
     const data = await drupal.query<{
-      nodePlants: {
-        nodes: DrupalProduct[]
-      }
+      commerceProducts: CommerceProduct[]
     }>({
       query: `
         query {
-          nodePlants(first: 50) {
-            nodes {
-              title
-              id
-              path
-              body {
-                value
-                processed
-                format
-              }
-              images {
-                alt
-                url
-              }
-              created {
-                time
-              }
-            }
+          commerceProducts(limit: 50) {
+            id
+            uuid
+            title
+            sku
+            price
+            body
+            path
+            images
+            category
           }
         }
       `,
     })
 
-    return data?.nodePlants?.nodes ?? []
+    return data?.commerceProducts ?? []
   } catch (error) {
     console.error("Error fetching products:", error)
     return []
@@ -56,48 +57,38 @@ async function getProducts() {
 export default async function ProductsPage({ searchParams }: ProductsPageProps) {
   const products = await getProducts()
   const resolvedSearchParams = await searchParams
-  const sortBy = (resolvedSearchParams.sort as string) || "date-desc"
-  const selectedCategories = Array.isArray(resolvedSearchParams.category) 
-    ? resolvedSearchParams.category 
-    : resolvedSearchParams.category 
-      ? [resolvedSearchParams.category] 
+  const sortBy = (resolvedSearchParams.sort as string) || "title-asc"
+  const selectedCategories = Array.isArray(resolvedSearchParams.category)
+    ? resolvedSearchParams.category
+    : resolvedSearchParams.category
+      ? [resolvedSearchParams.category]
       : []
 
-  // Mock category assignment for products (in real implementation, this would come from Drupal)
-  const productsWithCategories = products.map((product, index) => ({
-    ...product,
-    category: ["indoor-plants", "outdoor-plants", "succulents", "planters"][index % 4]
-  }))
-
-  const filterProducts = (products: DrupalProduct[], categories: string[]) => {
+  const filterProducts = (products: CommerceProduct[], categories: string[]) => {
     if (categories.length === 0) return products
-    return products.filter(product => 
-      categories.includes((product as any).category)
+    return products.filter(product =>
+      product.category && categories.includes(product.category)
     )
   }
 
-  const sortProducts = (products: DrupalProduct[], sortOption: string) => {
+  const sortProducts = (products: CommerceProduct[], sortOption: string) => {
     const sortedProducts = [...products]
 
     switch (sortOption) {
-      case "date-desc":
-        return sortedProducts.sort((a, b) => 
-          new Date(b.created?.time || 0).getTime() - new Date(a.created?.time || 0).getTime()
-        )
-      case "date-asc":
-        return sortedProducts.sort((a, b) => 
-          new Date(a.created?.time || 0).getTime() - new Date(b.created?.time || 0).getTime()
-        )
+      case "title-asc":
+        return sortedProducts.sort((a, b) => a.title.localeCompare(b.title))
+      case "title-desc":
+        return sortedProducts.sort((a, b) => b.title.localeCompare(a.title))
       case "price-desc":
-        return sortedProducts.sort((a, b) => 99.99 - 99.99) // Mock price sorting
+        return sortedProducts.sort((a, b) => (b.price || 0) - (a.price || 0))
       case "price-asc":
-        return sortedProducts.sort((a, b) => 99.99 - 99.99) // Mock price sorting
+        return sortedProducts.sort((a, b) => (a.price || 0) - (b.price || 0))
       default:
         return sortedProducts
     }
   }
 
-  const filteredProducts = filterProducts(productsWithCategories, selectedCategories)
+  const filteredProducts = filterProducts(products, selectedCategories)
   const sortedProducts = sortProducts(filteredProducts, sortBy)
 
   return (
@@ -131,12 +122,12 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {sortedProducts.map((product) => (
                 <ProductCard
-                  key={product.id}
-                  id={product.id}
+                  key={product.uuid}
+                  id={product.uuid}
                   title={product.title}
-                  price={99.99}
-                  image={product.images?.[0]?.url || "/placeholder-image.jpg"}
-                  category={(product as any).category}
+                  price={product.price || 0}
+                  image={product.images?.[0] || "/placeholder-image.jpg"}
+                  category={product.category || "Uncategorized"}
                   path={product.path}
                 />
               ))}
