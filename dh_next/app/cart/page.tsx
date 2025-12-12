@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Link } from "@/components/navigation/Link"
 import { drupal } from "@/lib/drupal"
+import { CheckoutModal } from "@/components/checkout/CheckoutModal"
 
 interface CartItem {
   id: string
@@ -33,6 +34,7 @@ export default function CartPage() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
 
   const fetchCartData = async (showLoading = true) => {
     try {
@@ -190,6 +192,11 @@ export default function CartPage() {
     }
   }
 
+  const handleCheckoutSuccess = () => {
+    // Refresh cart after successful checkout
+    fetchCartData()
+  }
+
   if (loading) {
     return (
       <div className="py-12">
@@ -337,7 +344,10 @@ export default function CartPage() {
                 </div>
               </div>
 
-              <button className="mt-6 w-full rounded-lg bg-primary py-3 px-4 text-white font-medium hover:bg-primary-dark transition-colors">
+              <button
+                onClick={() => setShowCheckoutModal(true)}
+                className="mt-6 w-full rounded-lg bg-primary py-3 px-4 text-white font-medium hover:bg-primary-dark transition-colors"
+              >
                 Proceed to Checkout
               </button>
 
@@ -370,6 +380,14 @@ export default function CartPage() {
           </div>
         </div>
       )}
+
+      {/* Checkout Modal */}
+      <CheckoutModal
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
+        totalPrice={cartData.totalPrice}
+        onSuccess={handleCheckoutSuccess}
+      />
     </div>
   )
 }

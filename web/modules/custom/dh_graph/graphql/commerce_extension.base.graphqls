@@ -36,3 +36,20 @@ type CartData {
   totalItems: Int!
   totalPrice: Float!
 }
+
+input BillingAddressInput {
+  firstName: String!
+  lastName: String!
+  email: String!
+  address: String!
+  city: String!
+  postalCode: String!
+  country: String!
+}
+
+type CheckoutResult {
+  orderId: Int!
+  orderNumber: String!
+  success: Boolean!
+  message: String
+}

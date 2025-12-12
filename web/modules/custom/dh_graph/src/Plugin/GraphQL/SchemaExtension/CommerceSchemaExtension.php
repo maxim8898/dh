@@ -467,8 +467,12 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
             throw new \Exception('Cart item not found');
           }
 
+          // Get the cart
+          $cart = $getCart();
+
           // Update quantity
-          $cart_manager->updateOrderItem($order_item, ['quantity' => $quantity]);
+          $order_item->setQuantity($quantity);
+          $cart_manager->updateOrderItem($cart, $order_item);
 
           return [
             'id' => (string) $order_item->id(),
@@ -529,6 +533,122 @@ class CommerceSchemaExtension extends SdlSchemaExtensionPluginBase {
           ]);
           return false;
         }
+      })
+    );
+
+    // Process checkout mutation.
+    $registry->addFieldResolver('Mutation', 'processCheckout',
+      $builder->callback(function ($value, $args, $context, $info) use ($getCart) {
+        try {
+          $cart = $getCart();
+
+          // Validate cart has items
+          $items = $cart->getItems();
+          if (empty($items)) {
+            throw new \Exception('Cart is empty');
+          }
+
+          // Get billing address input
+          $billing_address_data = $args['billingAddress'];
+
+          // Create billing profile
+          $profile_storage = \Drupal::entityTypeManager()->getStorage('profile');
+          $billing_profile = $profile_storage->create([
+            'type' => 'customer',
+            'uid' => \Drupal::currentUser()->id(),
+            'address' => [
+              'country_code' => $billing_address_data['country'],
+              'address_line1' => $billing_address_data['address'],
+              'locality' => $billing_address_data['city'],
+              'postal_code' => $billing_address_data['postalCode'],
+              'given_name' => $billing_address_data['firstName'],
+              'family_name' => $billing_address_data['lastName'],
+            ],
+          ]);
+          $billing_profile->save();
+
+          // Set billing profile on the order
+          $cart->setBillingProfile($billing_profile);
+
+          // Set email
+          $cart->setEmail($billing_address_data['email']);
+
+          // Create payment information (stored as order data)
+          // NOTE: In production, never store raw card data - use a payment gateway
+          $payment_info = [
+            'card_name' => $args['cardName'],
+            'card_number_last4' => substr($args['cardNumber'], -4),
+            'card_exp_month' => $args['expiryMonth'],
+            'card_exp_year' => $args['expiryYear'],
+          ];
+
+          // Store payment info in order data
+          $cart->setData('payment_info', $payment_info);
+
+          // Transition cart to completed order
+          $workflow = $cart->getState()->getWorkflow();
+
+          // Set state to completed
+          $cart->set('state', 'completed');
+          $cart->set('placed', \Drupal::time()->getRequestTime());
+
+          // Generate order number if not set
+          if (!$cart->getOrderNumber()) {
+            // Generate a simple order number based on timestamp and order ID
+            $order_number = date('Y') . '-' . str_pad($cart->id(), 6, '0', STR_PAD_LEFT);
+            $cart->setOrderNumber($order_number);
+          }
+
+          $cart->save();
+
+          \Drupal::logger('dh_graph')->info('Order completed: @order_id (@order_number)', [
+            '@order_id' => $cart->id(),
+            '@order_number' => $cart->getOrderNumber(),
+          ]);
+
+          return [
+            'orderId' => (int) $cart->id(),
+            'orderNumber' => $cart->getOrderNumber(),
+            'success' => TRUE,
+            'message' => 'Order completed successfully',
+          ];
+        } catch (\Exception $e) {
+          \Drupal::logger('dh_graph')->error('Checkout error: @error', [
+            '@error' => $e->getMessage(),
+          ]);
+
+          return [
+            'orderId' => 0,
+            'orderNumber' => '',
+            'success' => FALSE,
+            'message' => $e->getMessage(),
+          ];
+        }
+      })
+    );
+
+    // CheckoutResult field resolvers.
+    $registry->addFieldResolver('CheckoutResult', 'orderId',
+      $builder->callback(function ($value, $args, $context, $info) {
+        return $value['orderId'];
+      })
+    );
+
+    $registry->addFieldResolver('CheckoutResult', 'orderNumber',
+      $builder->callback(function ($value, $args, $context, $info) {
+        return $value['orderNumber'];
+      })
+    );
+
+    $registry->addFieldResolver('CheckoutResult', 'success',
+      $builder->callback(function ($value, $args, $context, $info) {
+        return $value['success'];
+      })
+    );
+
+    $registry->addFieldResolver('CheckoutResult', 'message',
+      $builder->callback(function ($value, $args, $context, $info) {
+        return $value['message'];
       })
     );
 

@@ -1,10 +1,43 @@
 "use client"
 
 import { Link } from "@/components/navigation/Link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { drupal } from "@/lib/drupal"
 
 export function HeaderNav() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
+  const [mounted, setMounted] = useState(false)
+
+  const fetchCartCount = async () => {
+    try {
+      const result = await drupal.query<{ cart: { totalItems: number } }>({
+        query: `
+          query {
+            cart {
+              totalItems
+            }
+          }
+        `,
+      })
+
+      if (result?.cart) {
+        setCartCount(result.cart.totalItems)
+      }
+    } catch (error) {
+      console.error("Error fetching cart count:", error)
+    }
+  }
+
+  useEffect(() => {
+    setMounted(true)
+    fetchCartCount()
+
+    // Poll for cart updates every 10 seconds
+    const interval = setInterval(fetchCartCount, 10000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <header className="bg-white border-b border-neutral-200">
@@ -48,9 +81,11 @@ export function HeaderNav() {
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
-                  <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
-                    0
-                  </span>
+                  {mounted && cartCount > 0 && (
+                    <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
+                      {cartCount}
+                    </span>
+                  )}
                 </Link>
               </div>
             </div>
@@ -63,9 +98,11 @@ export function HeaderNav() {
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
               </svg>
-              <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
-                0
-              </span>
+              {mounted && cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-xs text-white">
+                  {cartCount}
+                </span>
+              )}
             </Link>
 
             {/* Mobile Menu Toggle */}
@@ -95,7 +132,7 @@ export function HeaderNav() {
         <div className="md:hidden">
           <nav className="flex flex-col space-y-4 p-4 bg-white border-t border-neutral-200">
             <Link href="#" className="text-neutral-700 hover:text-primary">Home</Link>
-            <Link href="#" className="text-neutral-700 hover:text-primary">Shop</Link>
+            <Link href="/products" className="text-neutral-700 hover:text-primary">Products</Link>
             <Link href="#" className="text-neutral-700 hover:text-primary">Collections</Link>
             <Link href="#" className="text-neutral-700 hover:text-primary">About</Link>
             <Link href="#" className="text-neutral-700 hover:text-primary">Contact</Link>

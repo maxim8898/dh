@@ -10,4 +10,12 @@ extend type Mutation {
   updateCartItem(itemId: String!, quantity: Int!): CartItem
   removeFromCart(itemId: String!): Boolean
   clearCart: Boolean
+  processCheckout(
+    cardNumber: String!
+    cardName: String!
+    expiryMonth: String!
+    expiryYear: String!
+    cvv: String!
+    billingAddress: BillingAddressInput!
+  ): CheckoutResult
 }

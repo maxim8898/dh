@@ -1,0 +1,5 @@
+services:
+  dh_graph.graphql_cors_subscriber:
+    class: Drupal\dh_graph\EventSubscriber\GraphQLCorsSubscriber
+    tags:
+      - { name: event_subscriber }

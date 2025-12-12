@@ -30,15 +30,31 @@ export class NextDrupalGraphQL extends NextDrupalBase {
       withAuth: !!this.auth
     })
 
-    // Use native fetch to avoid NextDrupalBase authentication issues
+    // Build headers with OAuth authentication
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    }
+
+    // Add OAuth authentication if configured
+    if (this.auth) {
+      try {
+        const token = await this.getAccessToken()
+        if (token?.access_token) {
+          headers['Authorization'] = `Bearer ${token.access_token}`
+          console.log('Using OAuth authentication')
+        }
+      } catch (error) {
+        console.error('Failed to get OAuth token:', error)
+        throw new Error('OAuth authentication failed')
+      }
+    }
+
     const response = await fetch(this.endpoint, {
       method: "POST",
       body: JSON.stringify(payload),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      credentials: 'include', // Include credentials to maintain session for cart
+      headers,
+      credentials: 'include', // Keep for CORS
       cache: 'no-store', // Disable Next.js fetch caching
     })
 
