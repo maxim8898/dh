@@ -3,8 +3,46 @@
 import Image from "next/image"
 import { Link } from "@/components/navigation/Link"
 import { useState } from "react"
-import { drupal } from "@/lib/drupal"
-import type { AddToCartResult } from "@/lib/utils"
+import { gql } from '@apollo/client'
+import { useMutation } from '@apollo/client/react'
+
+const ADD_TO_CART = gql`
+  mutation AddToCart($productId: String!, $quantity: Int) {
+    addToCart(productId: $productId, quantity: $quantity) {
+      id
+      productId
+      quantity
+      addedAt
+      product {
+        id
+        title
+        sku
+      }
+    }
+  }
+`
+
+const GET_CART = gql`
+  query GetCart {
+    cart {
+      items {
+        id
+        productId
+        quantity
+        addedAt
+        product {
+          id
+          title
+          sku
+          price
+          image
+        }
+      }
+      totalItems
+      totalPrice
+    }
+  }
+`
 
 interface ProductCardProps {
   id: string
@@ -19,46 +57,31 @@ export function ProductCard({ id, title, price, image, category, path }: Product
   const [isAddingToCart, setIsAddingToCart] = useState(false)
   const [cartMessage, setCartMessage] = useState<string | null>(null)
 
+  const [addToCartMutation] = useMutation(ADD_TO_CART, {
+    refetchQueries: [{ query: GET_CART }],
+  })
+
   const handleAddToCart = async () => {
     if (isAddingToCart) return
-
-    console.log('ProductCard - ID received:', id, 'Type:', typeof id)
 
     setIsAddingToCart(true)
     setCartMessage(null)
 
     try {
-      const result = await drupal.query<AddToCartResult>({
-        query: `
-          mutation AddToCart($productId: String!, $quantity: Int) {
-            addToCart(productId: $productId, quantity: $quantity) {
-              id
-              productId
-              quantity
-              addedAt
-              product {
-                id
-                title
-                sku
-              }
-            }
-          }
-        `,
+      const result = await addToCartMutation({
         variables: {
-          productId: id, // Pass the UUID string directly
+          productId: id,
           quantity: 1,
         },
       })
 
-      if (result?.addToCart) {
+      if (result?.data?.addToCart) {
         setCartMessage("Added to cart!")
-        // Clear message after 3 seconds
         setTimeout(() => setCartMessage(null), 3000)
       }
     } catch (error) {
       console.error("Error adding to cart:", error)
       setCartMessage("Failed to add to cart")
-      // Clear error message after 3 seconds
       setTimeout(() => setCartMessage(null), 3000)
     } finally {
       setIsAddingToCart(false)

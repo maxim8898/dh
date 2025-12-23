@@ -4,7 +4,8 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
+    "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "preview": "next build && next start",
@@ -13,6 +14,9 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@apollo/client": "^4.0.11",
+    "@apollo/experimental-nextjs-app-support": "^0.14.3",
+    "graphql": "^16.12.0",
     "next": "^15.1.2",
     "next-drupal": "^2.0.0-beta.1",
     "react": "^19.0.0",

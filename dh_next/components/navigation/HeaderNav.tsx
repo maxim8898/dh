@@ -1,43 +1,28 @@
 "use client"
 
 import { Link } from "@/components/navigation/Link"
-import { useState, useEffect } from "react"
-import { drupal } from "@/lib/drupal"
+import { useState } from "react"
+import { gql } from '@apollo/client'
+import { useQuery } from '@apollo/client/react'
+
+const GET_CART_COUNT = gql`
+  query GetCartCount {
+    cart {
+      totalItems
+    }
+  }
+`
 
 export function HeaderNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [cartCount, setCartCount] = useState(0)
   const [mounted, setMounted] = useState(false)
 
-  const fetchCartCount = async () => {
-    try {
-      const result = await drupal.query<{ cart: { totalItems: number } }>({
-        query: `
-          query {
-            cart {
-              totalItems
-            }
-          }
-        `,
-      })
+  const { data } = useQuery(GET_CART_COUNT, {
+    pollInterval: 10000, // Poll every 10 seconds
+    onCompleted: () => setMounted(true),
+  })
 
-      if (result?.cart) {
-        setCartCount(result.cart.totalItems)
-      }
-    } catch (error) {
-      console.error("Error fetching cart count:", error)
-    }
-  }
-
-  useEffect(() => {
-    setMounted(true)
-    fetchCartCount()
-
-    // Poll for cart updates every 10 seconds
-    const interval = setInterval(fetchCartCount, 10000)
-
-    return () => clearInterval(interval)
-  }, [])
+  const cartCount = data?.cart?.totalItems || 0
 
   return (
     <header className="bg-white border-b border-neutral-200">

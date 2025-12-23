@@ -3,6 +3,7 @@
 import { DraftAlert } from "@/components/misc/DraftAlert"
 import { HeaderNav } from "@/components/navigation/HeaderNav"
 import { Footer } from "@/components/navigation/Footer"
+import { Providers } from "@/components/providers/Providers"
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
 
@@ -29,12 +30,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="flex flex-col min-h-screen bg-neutral-50">
-        <DraftAlert />
-        <div className="flex-grow">
-          <HeaderNav />
-          <main className="mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8">{children}</main>
-        </div>
-        <Footer />
+        <Providers>
+          <DraftAlert />
+          <div className="flex-grow">
+            <HeaderNav />
+            <main className="mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8">{children}</main>
+          </div>
+          <Footer />
+        </Providers>
       </body>
     </html>
   )

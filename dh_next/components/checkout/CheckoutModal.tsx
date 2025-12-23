@@ -1,7 +1,33 @@
 "use client"
 
 import { useState, FormEvent } from "react"
-import { drupal } from "@/lib/drupal"
+import { gql } from '@apollo/client'
+import { useMutation } from '@apollo/client/react'
+
+const PROCESS_CHECKOUT = gql`
+  mutation ProcessCheckout(
+    $cardNumber: String!
+    $cardName: String!
+    $expiryMonth: String!
+    $expiryYear: String!
+    $cvv: String!
+    $billingAddress: BillingAddressInput!
+  ) {
+    processCheckout(
+      cardNumber: $cardNumber
+      cardName: $cardName
+      expiryMonth: $expiryMonth
+      expiryYear: $expiryYear
+      cvv: $cvv
+      billingAddress: $billingAddress
+    ) {
+      orderId
+      orderNumber
+      success
+      message
+    }
+  }
+`
 
 interface CheckoutModalProps {
   isOpen: boolean
@@ -30,6 +56,9 @@ interface CardFormData {
 export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: CheckoutModalProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [processCheckoutMutation] = useMutation(PROCESS_CHECKOUT)
+
   const [formData, setFormData] = useState<CardFormData>({
     cardNumber: "",
     cardName: "",
@@ -132,31 +161,7 @@ export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: Checko
     setError(null)
 
     try {
-      const result = await drupal.query({
-        query: `
-          mutation ProcessCheckout(
-            $cardNumber: String!
-            $cardName: String!
-            $expiryMonth: String!
-            $expiryYear: String!
-            $cvv: String!
-            $billingAddress: BillingAddressInput!
-          ) {
-            processCheckout(
-              cardNumber: $cardNumber
-              cardName: $cardName
-              expiryMonth: $expiryMonth
-              expiryYear: $expiryYear
-              cvv: $cvv
-              billingAddress: $billingAddress
-            ) {
-              orderId
-              orderNumber
-              success
-              message
-            }
-          }
-        `,
+      const result = await processCheckoutMutation({
         variables: {
           cardNumber: formData.cardNumber.replace(/\s/g, ""),
           cardName: formData.cardName,
@@ -167,11 +172,11 @@ export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: Checko
         },
       })
 
-      if (result?.processCheckout?.success) {
+      if (result?.data?.processCheckout?.success) {
         onSuccess()
         onClose()
       } else {
-        setError(result?.processCheckout?.message || "Checkout failed")
+        setError(result?.data?.processCheckout?.message || "Checkout failed")
       }
     } catch (err) {
       console.error("Checkout error:", err)
