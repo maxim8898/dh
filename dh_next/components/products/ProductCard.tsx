@@ -5,6 +5,7 @@ import { Link } from "@/components/navigation/Link"
 import { useState } from "react"
 import { gql } from '@apollo/client'
 import { useMutation } from '@apollo/client/react'
+import { GET_CART_COUNT } from "@/components/navigation/HeaderNav"
 
 const ADD_TO_CART = gql`
   mutation AddToCart($productId: String!, $quantity: Int) {
@@ -58,7 +59,7 @@ export function ProductCard({ id, title, price, image, category, path }: Product
   const [cartMessage, setCartMessage] = useState<string | null>(null)
 
   const [addToCartMutation] = useMutation(ADD_TO_CART, {
-    refetchQueries: [{ query: GET_CART }],
+    refetchQueries: [{ query: GET_CART }, { query: GET_CART_COUNT }],
   })
 
   const handleAddToCart = async () => {

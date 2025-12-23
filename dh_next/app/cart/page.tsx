@@ -6,6 +6,7 @@ import { Link } from "@/components/navigation/Link"
 import { CheckoutModal } from "@/components/checkout/CheckoutModal"
 import { gql } from "@apollo/client"
 import { useQuery, useMutation } from '@apollo/client/react'
+import { GET_CART_COUNT } from "@/components/navigation/HeaderNav"
 
 const GET_CART = gql`
   query GetCart {
@@ -76,15 +77,15 @@ export default function CartPage() {
   const { data, loading, error, refetch } = useQuery<{ cart: CartData }>(GET_CART)
 
   const [updateCartItemMutation] = useMutation(UPDATE_CART_ITEM, {
-    refetchQueries: [{ query: GET_CART }],
+    refetchQueries: [{ query: GET_CART }, { query: GET_CART_COUNT }],
   })
 
   const [removeFromCartMutation] = useMutation(REMOVE_FROM_CART, {
-    refetchQueries: [{ query: GET_CART }],
+    refetchQueries: [{ query: GET_CART }, { query: GET_CART_COUNT }],
   })
 
   const [clearCartMutation] = useMutation(CLEAR_CART, {
-    refetchQueries: [{ query: GET_CART }],
+    refetchQueries: [{ query: GET_CART }, { query: GET_CART_COUNT }],
   })
 
   const cartData = data?.cart || {

@@ -1,11 +1,11 @@
 "use client"
 
 import { Link } from "@/components/navigation/Link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { gql } from '@apollo/client'
 import { useQuery } from '@apollo/client/react'
 
-const GET_CART_COUNT = gql`
+export const GET_CART_COUNT = gql`
   query GetCartCount {
     cart {
       totalItems
@@ -17,10 +17,18 @@ export function HeaderNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  const { data } = useQuery(GET_CART_COUNT, {
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const { data, error } = useQuery(GET_CART_COUNT, {
     pollInterval: 10000, // Poll every 10 seconds
-    onCompleted: () => setMounted(true),
+    fetchPolicy: 'cache-and-network',
   })
+
+  if (error) {
+    console.error('Error fetching cart count:', error)
+  }
 
   const cartCount = data?.cart?.totalItems || 0
 

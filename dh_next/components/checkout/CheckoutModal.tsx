@@ -1,8 +1,11 @@
 "use client"
 
-import { useState, FormEvent } from "react"
+import { useState } from "react"
 import { gql } from '@apollo/client'
 import { useMutation } from '@apollo/client/react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 
 const PROCESS_CHECKOUT = gql`
   mutation ProcessCheckout(
@@ -29,28 +32,74 @@ const PROCESS_CHECKOUT = gql`
   }
 `
 
+// Zod validation schema
+const checkoutSchema = z.object({
+  cardNumber: z
+    .string()
+    .min(1, 'Card number is required')
+    .transform((val) => val.replace(/\s/g, ''))
+    .refine((val) => /^\d{13,19}$/.test(val), {
+      message: 'Invalid card number (13-19 digits)',
+    }),
+  cardName: z
+    .string()
+    .min(1, 'Cardholder name is required')
+    .min(3, 'Name must be at least 3 characters'),
+  expiryMonth: z
+    .string()
+    .min(1, 'Expiry month is required')
+    .refine((val) => {
+      const month = parseInt(val)
+      return month >= 1 && month <= 12
+    }, 'Invalid month'),
+  expiryYear: z
+    .string()
+    .min(1, 'Expiry year is required')
+    .refine((val) => {
+      const year = parseInt(val)
+      const currentYear = new Date().getFullYear()
+      return year >= currentYear && year <= currentYear + 20
+    }, 'Invalid year'),
+  cvv: z
+    .string()
+    .min(1, 'CVV is required')
+    .regex(/^\d{3,4}$/, 'CVV must be 3 or 4 digits'),
+  billingAddress: z.object({
+    firstName: z
+      .string()
+      .min(1, 'First name is required')
+      .min(2, 'First name must be at least 2 characters'),
+    lastName: z
+      .string()
+      .min(1, 'Last name is required')
+      .min(2, 'Last name must be at least 2 characters'),
+    email: z
+      .string()
+      .min(1, 'Email is required')
+      .email('Invalid email address'),
+    address: z
+      .string()
+      .min(1, 'Address is required')
+      .min(5, 'Address must be at least 5 characters'),
+    city: z
+      .string()
+      .min(1, 'City is required')
+      .min(2, 'City must be at least 2 characters'),
+    postalCode: z
+      .string()
+      .min(1, 'Postal code is required')
+      .min(3, 'Postal code must be at least 3 characters'),
+    country: z.string().min(2, 'Country is required'),
+  }),
+})
+
+type CheckoutFormData = z.infer<typeof checkoutSchema>
+
 interface CheckoutModalProps {
   isOpen: boolean
   onClose: () => void
   totalPrice: number
   onSuccess: () => void
-}
-
-interface CardFormData {
-  cardNumber: string
-  cardName: string
-  expiryMonth: string
-  expiryYear: string
-  cvv: string
-  billingAddress: {
-    firstName: string
-    lastName: string
-    email: string
-    address: string
-    city: string
-    postalCode: string
-    country: string
-  }
 }
 
 export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: CheckoutModalProps) {
@@ -59,116 +108,47 @@ export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: Checko
 
   const [processCheckoutMutation] = useMutation(PROCESS_CHECKOUT)
 
-  const [formData, setFormData] = useState<CardFormData>({
-    cardNumber: "",
-    cardName: "",
-    expiryMonth: "",
-    expiryYear: "",
-    cvv: "",
-    billingAddress: {
-      firstName: "",
-      lastName: "",
-      email: "",
-      address: "",
-      city: "",
-      postalCode: "",
-      country: "US",
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    watch,
+    setValue,
+  } = useForm<CheckoutFormData>({
+    resolver: zodResolver(checkoutSchema),
+    defaultValues: {
+      cardNumber: '',
+      cardName: '',
+      expiryMonth: '',
+      expiryYear: '',
+      cvv: '',
+      billingAddress: {
+        firstName: '',
+        lastName: '',
+        email: '',
+        address: '',
+        city: '',
+        postalCode: '',
+        country: 'US',
+      },
     },
   })
 
-  const [errors, setErrors] = useState<Partial<Record<keyof CardFormData | string, string>>>({})
-
   if (!isOpen) return null
 
-  const validateForm = (): boolean => {
-    const newErrors: Partial<Record<string, string>> = {}
-
-    // Card number validation (basic - just check length and numbers)
-    const cardNumberClean = formData.cardNumber.replace(/\s/g, "")
-    if (!cardNumberClean) {
-      newErrors.cardNumber = "Card number is required"
-    } else if (!/^\d{13,19}$/.test(cardNumberClean)) {
-      newErrors.cardNumber = "Invalid card number"
-    }
-
-    // Card name validation
-    if (!formData.cardName.trim()) {
-      newErrors.cardName = "Cardholder name is required"
-    }
-
-    // Expiry validation
-    if (!formData.expiryMonth) {
-      newErrors.expiryMonth = "Month is required"
-    }
-    if (!formData.expiryYear) {
-      newErrors.expiryYear = "Year is required"
-    }
-
-    // Check if card is expired
-    if (formData.expiryMonth && formData.expiryYear) {
-      const currentDate = new Date()
-      const currentYear = currentDate.getFullYear()
-      const currentMonth = currentDate.getMonth() + 1
-      const expYear = parseInt(formData.expiryYear)
-      const expMonth = parseInt(formData.expiryMonth)
-
-      if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
-        newErrors.expiryMonth = "Card is expired"
-      }
-    }
-
-    // CVV validation
-    if (!formData.cvv) {
-      newErrors.cvv = "CVV is required"
-    } else if (!/^\d{3,4}$/.test(formData.cvv)) {
-      newErrors.cvv = "Invalid CVV"
-    }
-
-    // Billing address validation
-    if (!formData.billingAddress.firstName.trim()) {
-      newErrors["billingAddress.firstName"] = "First name is required"
-    }
-    if (!formData.billingAddress.lastName.trim()) {
-      newErrors["billingAddress.lastName"] = "Last name is required"
-    }
-    if (!formData.billingAddress.email.trim()) {
-      newErrors["billingAddress.email"] = "Email is required"
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.billingAddress.email)) {
-      newErrors["billingAddress.email"] = "Invalid email address"
-    }
-    if (!formData.billingAddress.address.trim()) {
-      newErrors["billingAddress.address"] = "Address is required"
-    }
-    if (!formData.billingAddress.city.trim()) {
-      newErrors["billingAddress.city"] = "City is required"
-    }
-    if (!formData.billingAddress.postalCode.trim()) {
-      newErrors["billingAddress.postalCode"] = "Postal code is required"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      return
-    }
-
+  const onSubmit = async (data: CheckoutFormData) => {
     setLoading(true)
     setError(null)
 
     try {
       const result = await processCheckoutMutation({
         variables: {
-          cardNumber: formData.cardNumber.replace(/\s/g, ""),
-          cardName: formData.cardName,
-          expiryMonth: formData.expiryMonth,
-          expiryYear: formData.expiryYear,
-          cvv: formData.cvv,
-          billingAddress: formData.billingAddress,
+          cardNumber: data.cardNumber,
+          cardName: data.cardName,
+          expiryMonth: data.expiryMonth,
+          expiryYear: data.expiryYear,
+          cvv: data.cvv,
+          billingAddress: data.billingAddress,
         },
       })
 
@@ -188,365 +168,316 @@ export function CheckoutModal({ isOpen, onClose, totalPrice, onSuccess }: Checko
 
   const formatCardNumber = (value: string) => {
     const cleaned = value.replace(/\s/g, "")
-    const groups = cleaned.match(/.{1,4}/g)
-    return groups ? groups.join(" ") : cleaned
+    const chunks = cleaned.match(/.{1,4}/g)
+    return chunks ? chunks.join(" ") : cleaned
+  }
+
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatCardNumber(e.target.value.replace(/\D/g, "").slice(0, 19))
+    setValue('cardNumber', formatted, { shouldValidate: true })
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-lg shadow-xl">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-neutral-200 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-neutral-900">Checkout</h2>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 transition-colors"
-            disabled={loading}
-          >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+          onClick={onClose}
+        />
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        {/* Modal */}
+        <div className="relative w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
+          {/* Header */}
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-neutral-900">Checkout</h2>
+            <button
+              onClick={onClose}
+              className="text-neutral-400 hover:text-neutral-600"
+            >
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Error Message */}
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <div className="mb-4 rounded-md bg-red-50 p-4">
               <p className="text-sm text-red-800">{error}</p>
             </div>
           )}
 
-          {/* Order Summary */}
-          <div className="rounded-lg bg-neutral-50 p-4">
-            <h3 className="font-semibold text-neutral-900 mb-2">Order Total</h3>
-            <p className="text-2xl font-bold text-primary">${totalPrice.toFixed(2)}</p>
-          </div>
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Card Information */}
+            <div>
+              <h3 className="mb-4 text-lg font-semibold text-neutral-900">Payment Information</h3>
 
-          {/* Card Details */}
-          <div>
-            <h3 className="text-lg font-semibold text-neutral-900 mb-4">Payment Information</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Card Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.cardNumber}
-                  onChange={(e) => {
-                    const formatted = formatCardNumber(e.target.value)
-                    if (formatted.replace(/\s/g, "").length <= 19) {
-                      setFormData({ ...formData, cardNumber: formatted })
-                    }
-                  }}
-                  placeholder="1234 5678 9012 3456"
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                    errors.cardNumber ? "border-red-500" : "border-neutral-300"
-                  }`}
-                  disabled={loading}
-                />
-                {errors.cardNumber && (
-                  <p className="mt-1 text-sm text-red-600">{errors.cardNumber}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Cardholder Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.cardName}
-                  onChange={(e) => setFormData({ ...formData, cardName: e.target.value })}
-                  placeholder="John Doe"
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                    errors.cardName ? "border-red-500" : "border-neutral-300"
-                  }`}
-                  disabled={loading}
-                />
-                {errors.cardName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.cardName}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-4">
+                {/* Card Number */}
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Month
-                  </label>
-                  <select
-                    value={formData.expiryMonth}
-                    onChange={(e) => setFormData({ ...formData, expiryMonth: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors.expiryMonth ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
-                  >
-                    <option value="">MM</option>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                      <option key={month} value={month.toString().padStart(2, "0")}>
-                        {month.toString().padStart(2, "0")}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.expiryMonth && (
-                    <p className="mt-1 text-sm text-red-600">{errors.expiryMonth}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Year
-                  </label>
-                  <select
-                    value={formData.expiryYear}
-                    onChange={(e) => setFormData({ ...formData, expiryYear: e.target.value })}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors.expiryYear ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
-                  >
-                    <option value="">YYYY</option>
-                    {Array.from({ length: 20 }, (_, i) => new Date().getFullYear() + i).map((year) => (
-                      <option key={year} value={year}>
-                        {year}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.expiryYear && (
-                    <p className="mt-1 text-sm text-red-600">{errors.expiryYear}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    CVV
+                  <label className="block text-sm font-medium text-neutral-700">
+                    Card Number
                   </label>
                   <input
                     type="text"
-                    value={formData.cvv}
-                    onChange={(e) => {
-                      if (/^\d{0,4}$/.test(e.target.value)) {
-                        setFormData({ ...formData, cvv: e.target.value })
-                      }
-                    }}
-                    placeholder="123"
-                    maxLength={4}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors.cvv ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
+                    {...register('cardNumber')}
+                    onChange={handleCardNumberChange}
+                    placeholder="1234 5678 9012 3456"
+                    className={`mt-1 block w-full rounded-md border ${
+                      errors.cardNumber ? 'border-red-300' : 'border-neutral-300'
+                    } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
                   />
-                  {errors.cvv && (
-                    <p className="mt-1 text-sm text-red-600">{errors.cvv}</p>
+                  {errors.cardNumber && (
+                    <p className="mt-1 text-sm text-red-600">{errors.cardNumber.message}</p>
                   )}
+                </div>
+
+                {/* Cardholder Name */}
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700">
+                    Cardholder Name
+                  </label>
+                  <input
+                    type="text"
+                    {...register('cardName')}
+                    placeholder="John Doe"
+                    className={`mt-1 block w-full rounded-md border ${
+                      errors.cardName ? 'border-red-300' : 'border-neutral-300'
+                    } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                  />
+                  {errors.cardName && (
+                    <p className="mt-1 text-sm text-red-600">{errors.cardName.message}</p>
+                  )}
+                </div>
+
+                {/* Expiry and CVV */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      Month
+                    </label>
+                    <select
+                      {...register('expiryMonth')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.expiryMonth ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    >
+                      <option value="">MM</option>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                        <option key={month} value={month.toString().padStart(2, '0')}>
+                          {month.toString().padStart(2, '0')}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.expiryMonth && (
+                      <p className="mt-1 text-sm text-red-600">{errors.expiryMonth.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      Year
+                    </label>
+                    <select
+                      {...register('expiryYear')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.expiryYear ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    >
+                      <option value="">YYYY</option>
+                      {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i).map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                    {errors.expiryYear && (
+                      <p className="mt-1 text-sm text-red-600">{errors.expiryYear.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      CVV
+                    </label>
+                    <input
+                      type="text"
+                      {...register('cvv')}
+                      placeholder="123"
+                      maxLength={4}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.cvv ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    />
+                    {errors.cvv && (
+                      <p className="mt-1 text-sm text-red-600">{errors.cvv.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Billing Address */}
-          <div>
-            <h3 className="text-lg font-semibold text-neutral-900 mb-4">Billing Address</h3>
+            {/* Billing Address */}
+            <div>
+              <h3 className="mb-4 text-lg font-semibold text-neutral-900">Billing Address</h3>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                {/* First and Last Name */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      First Name
+                    </label>
+                    <input
+                      type="text"
+                      {...register('billingAddress.firstName')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.billingAddress?.firstName ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    />
+                    {errors.billingAddress?.firstName && (
+                      <p className="mt-1 text-sm text-red-600">{errors.billingAddress.firstName.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      Last Name
+                    </label>
+                    <input
+                      type="text"
+                      {...register('billingAddress.lastName')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.billingAddress?.lastName ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    />
+                    {errors.billingAddress?.lastName && (
+                      <p className="mt-1 text-sm text-red-600">{errors.billingAddress.lastName.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    First Name
+                  <label className="block text-sm font-medium text-neutral-700">
+                    Email
                   </label>
                   <input
-                    type="text"
-                    value={formData.billingAddress.firstName}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        billingAddress: { ...formData.billingAddress, firstName: e.target.value },
-                      })
-                    }
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors["billingAddress.firstName"] ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
+                    type="email"
+                    {...register('billingAddress.email')}
+                    className={`mt-1 block w-full rounded-md border ${
+                      errors.billingAddress?.email ? 'border-red-300' : 'border-neutral-300'
+                    } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
                   />
-                  {errors["billingAddress.firstName"] && (
-                    <p className="mt-1 text-sm text-red-600">{errors["billingAddress.firstName"]}</p>
+                  {errors.billingAddress?.email && (
+                    <p className="mt-1 text-sm text-red-600">{errors.billingAddress.email.message}</p>
                   )}
                 </div>
 
+                {/* Address */}
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Last Name
+                  <label className="block text-sm font-medium text-neutral-700">
+                    Address
                   </label>
                   <input
                     type="text"
-                    value={formData.billingAddress.lastName}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        billingAddress: { ...formData.billingAddress, lastName: e.target.value },
-                      })
-                    }
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors["billingAddress.lastName"] ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
+                    {...register('billingAddress.address')}
+                    className={`mt-1 block w-full rounded-md border ${
+                      errors.billingAddress?.address ? 'border-red-300' : 'border-neutral-300'
+                    } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
                   />
-                  {errors["billingAddress.lastName"] && (
-                    <p className="mt-1 text-sm text-red-600">{errors["billingAddress.lastName"]}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.billingAddress.email}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      billingAddress: { ...formData.billingAddress, email: e.target.value },
-                    })
-                  }
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                    errors["billingAddress.email"] ? "border-red-500" : "border-neutral-300"
-                  }`}
-                  disabled={loading}
-                />
-                {errors["billingAddress.email"] && (
-                  <p className="mt-1 text-sm text-red-600">{errors["billingAddress.email"]}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Address
-                </label>
-                <input
-                  type="text"
-                  value={formData.billingAddress.address}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      billingAddress: { ...formData.billingAddress, address: e.target.value },
-                    })
-                  }
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                    errors["billingAddress.address"] ? "border-red-500" : "border-neutral-300"
-                  }`}
-                  disabled={loading}
-                />
-                {errors["billingAddress.address"] && (
-                  <p className="mt-1 text-sm text-red-600">{errors["billingAddress.address"]}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.billingAddress.city}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        billingAddress: { ...formData.billingAddress, city: e.target.value },
-                      })
-                    }
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors["billingAddress.city"] ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
-                  />
-                  {errors["billingAddress.city"] && (
-                    <p className="mt-1 text-sm text-red-600">{errors["billingAddress.city"]}</p>
+                  {errors.billingAddress?.address && (
+                    <p className="mt-1 text-sm text-red-600">{errors.billingAddress.address.message}</p>
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-1">
-                    Postal Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.billingAddress.postalCode}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        billingAddress: { ...formData.billingAddress, postalCode: e.target.value },
-                      })
-                    }
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent ${
-                      errors["billingAddress.postalCode"] ? "border-red-500" : "border-neutral-300"
-                    }`}
-                    disabled={loading}
-                  />
-                  {errors["billingAddress.postalCode"] && (
-                    <p className="mt-1 text-sm text-red-600">{errors["billingAddress.postalCode"]}</p>
-                  )}
-                </div>
-              </div>
+                {/* City, Postal Code, Country */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      City
+                    </label>
+                    <input
+                      type="text"
+                      {...register('billingAddress.city')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.billingAddress?.city ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    />
+                    {errors.billingAddress?.city && (
+                      <p className="mt-1 text-sm text-red-600">{errors.billingAddress.city.message}</p>
+                    )}
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  Country
-                </label>
-                <select
-                  value={formData.billingAddress.country}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      billingAddress: { ...formData.billingAddress, country: e.target.value },
-                    })
-                  }
-                  className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                  disabled={loading}
-                >
-                  <option value="US">United States</option>
-                  <option value="CA">Canada</option>
-                  <option value="GB">United Kingdom</option>
-                  <option value="AU">Australia</option>
-                </select>
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      Postal Code
+                    </label>
+                    <input
+                      type="text"
+                      {...register('billingAddress.postalCode')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.billingAddress?.postalCode ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    />
+                    {errors.billingAddress?.postalCode && (
+                      <p className="mt-1 text-sm text-red-600">{errors.billingAddress.postalCode.message}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-neutral-700">
+                      Country
+                    </label>
+                    <select
+                      {...register('billingAddress.country')}
+                      className={`mt-1 block w-full rounded-md border ${
+                        errors.billingAddress?.country ? 'border-red-300' : 'border-neutral-300'
+                      } px-3 py-2 shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary`}
+                    >
+                      <option value="US">United States</option>
+                      <option value="CA">Canada</option>
+                      <option value="UK">United Kingdom</option>
+                      <option value="AU">Australia</option>
+                    </select>
+                    {errors.billingAddress?.country && (
+                      <p className="mt-1 text-sm text-red-600">{errors.billingAddress.country.message}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Submit Button */}
-          <div className="sticky bottom-0 bg-white border-t border-neutral-200 -mx-6 -mb-6 px-6 py-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 border border-neutral-300 rounded-lg text-neutral-700 hover:bg-neutral-50 transition-colors"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span>Processing...</span>
-                </>
-              ) : (
-                <span>Complete Order</span>
-              )}
-            </button>
-          </div>
-        </form>
+            {/* Order Summary */}
+            <div className="rounded-lg bg-neutral-50 p-4">
+              <div className="flex justify-between text-lg font-semibold">
+                <span>Total</span>
+                <span className="text-primary">${totalPrice.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-3 font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex-1 rounded-lg bg-primary px-4 py-3 font-medium text-white hover:bg-primary-dark disabled:opacity-50"
+              >
+                {loading ? "Processing..." : `Pay $${totalPrice.toFixed(2)}`}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   )
